@@ -20,7 +20,7 @@ class NamedArgs {
 				KlasImpl.initalize();
 			}
 			
-			KlasImpl.DEFAULTS.push(NamedArgs.handler);
+			KlasImpl.DEFAULTS.set('NamedArgs', NamedArgs.handler);
 		} catch (e:Dynamic) {
 			// This assumes that `implements Klas` is not being used
 			// but `@:autoBuild` or `@:build` metadata is being used 
