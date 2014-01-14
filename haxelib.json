@@ -1,0 +1,15 @@
+{
+  "name": "named",
+  "license": "MIT",
+  "classPath": "src",
+  "tags": ["uhu", "uhx", "macro", "named", "arguments", "parameter"],
+  "description": "Implements named parameter's through macro's.",
+  "contributors": ["skial"],
+  "releasenote": "Initial Release",
+  "version": "0.0.1-alpha",
+  "url": "https://github.com/skial/named",
+  "dependencies": {
+	"klas": "",
+	"uhu": ""
+  }
+}
