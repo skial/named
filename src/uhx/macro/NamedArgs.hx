@@ -5,8 +5,13 @@ import haxe.macro.Expr;
 import haxe.macro.Context;
 import uhx.macro.KlasImpl;
 
+using Lambda;
 using StringTools;
-using uhu.macro.Jumla;
+using uhx.macro.NamedArgs;
+using haxe.macro.TypeTools;
+using haxe.macro.ExprTools;
+using haxe.macro.MacroStringTools;
+using haxe.macro.ComplexTypeTools;
 
 /**
  * ...
@@ -34,123 +39,237 @@ class NamedArgs {
 	
 	public static function handler(cls:ClassType, fields:Array<Field>):Array<Field> {
 		
-		for (field in fields) {
-			
-			switch (field.kind) {
+		for (field in fields) switch (field.kind) {
+			case FFun(method):
+				loop( method.expr, field );
 				
-				case FFun(method):
-					
-					method.expr = loop( method.expr );
-					
-				case _:
-				
-			}
+			case _:
 			
 		}
 		
 		return fields;
 	}
 	
-	private static function paramSub(type:Type, params:Array<Expr>):Array<Expr> {
-		var result:Array<Expr> = [];
-		var matches:Array<{e:Expr, n:String, pos:Int}> = [];
-		var args = type.args();
-		var arity = type.arity();
-		
-		for (i in 0...arity) {
-			if (args[i].opt) break;
-			// I consider this a poor check, but it works.
-			if (!args[i].opt && (params[i] == null || params[i].expr.getName() == 'EMeta')) return params;
+	private static function loop(e:Expr, field:Field) {
+		//trace( e.toString(), e );
+		switch (e) {
+			case macro $ident($a { params } ):
+				var type = e.resolve(field);
+				
+				if (type != null) {
+					var results = paramSub( type, params );
+					e.expr = Context.parse( '${ident.toString()}(${results.map(function(r) return r.toString()).join(",")})', e.pos).expr;
+				}
+				
+			case macro new $ident($a { params } ):
+				var results = paramSub( Context.typeof(e).getClass().constructor.get().type, params );
+				e.expr = Context.parse( 'new ${ident.toString()}(${results.map(function(r) return r.toString()).join(",")})', e.pos).expr;
+				
+			case _:
+				e.iter( loop.bind(_, field) );
+				
 		}
-		
-		for (i in 0...arity) {
-			var e = macro null;
-			if (params[i] != null && params[i].expr.getName() != 'EMeta') {
-				e = params[i];
-			}
-			result.push( e );
-		}
-		
-		for (i in 0...params.length) {
-			
-			var val:Expr = params[i];
-			
-			if (val.expr.getName() == 'EMeta') {
-				
-				//var type = expr.printExpr().find();
-				
-				var meta:MetadataEntry = val.expr.getParameters()[0];
-				var name:String = meta.name.replace(':', '');
-				
-				//result[ args.indexOf( name ) ] = val.expr.getParameters()[1];
-				matches.push( { e: val, n: name , pos: args.find( name ) } );
-				
-				//copy = copy.splice(0, i).concat( copy.splice(i + 1, -1) );
-				
-			}
-			
-		}
-		
-		for (match in matches) {
-			
-			if (match.pos == -1) {
-				trace( match );
-			}
-			
-			/*while (match.pos > copy.length - 1) {
-				
-				copy.push(macro null);
-				
-			}*/
-			
-			//copy[match.pos] = match.e.expr.getParameters()[1];
-			result[match.pos] = match.e.expr.getParameters()[1];
-			
-		}
-		
-		if (matches.length == 0) result = params;
-		
-		return result;
 	}
 	
-	private static function loop(e:Expr):Expr {
-		var result = e;
+	private static function paramSub(caller:Type, params:Array<Expr>) {
+		var args = switch(caller) {
+			case TFun(args, _): args;
+			case _: [];
+		}
+		var arity = args.length;
+		var new_params = [for (i in 0...arity) macro null];
+		var pos_map = [for (i in 0...arity) args[i].name => i];
 		
-		switch (e.expr) {
-			case EVars(vars):
-				for (v in vars) {
+		for (i in 0...params.length) switch (params[i]) {
+			case { expr: EMeta(meta, expr), pos: pos } if (pos_map.exists( meta.name.replace(':', '') )):
+				var name = meta.name.replace(':', '');
+				new_params[ pos_map.get( name ) ] = expr;
+				
+			case _:
+				new_params[i] = params[i];
+		}
+		
+		return new_params;
+	}
+	
+	private static function resolve(expr:Expr, local:Field) {
+		var type = null;
+		
+		switch (expr.expr) {
+			/*case EField(e, f):
+				var parts = [];
+				
+				var extract:Expr->Void = null;
+				extract = function(e) switch (e.expr) {
+					case EConst(CIdent(ident)): parts.push( ident );
+					case EField( { expr: EConst(CIdent(ident)), pos: pos }, f): parts = parts.concat( [ident, f] );
+					case _: e.iter( extract );
+				}
+				extract( e );
+				
+				parts.push( f );
+				
+				var pack = [];
+				
+				while (type == null && parts.length > 0) {
+					var part = parts.shift();
+					var name = pack.toDotPath( part );
 					
-					if (v.expr != null) {
+					try {
+						type = Context.getType( name );
+					} catch (_e:Dynamic) {
+						pack.push( part );
+					}
+				}
+				
+				if (type != null) {
+					if (parts.length > 0) type = type.resolveField( parts );
+				}
+				*/
+			case ECall(e, p):
+				var parts = [];
+				var extract:Expr->Void = null;
+				extract = function(expr) switch (expr.expr) {
+					case EConst( CIdent( ident ) ): parts.push( ident );
+					case EField( e, f ):
+						extract( e );
+						parts.push( f );
 						
-						v.expr = loop( v.expr );
+					case ECall( e, p ):
+						// This handles chained calls eg `m('a', 0)('b', 0)`
+						extract( e );
+						var type = expr.resolve(local);
+						if (type != null) {
+							var results = paramSub( type, p );
+							expr.expr = Context.parse( '${parts.join(".")}(${results.map(function(r) return r.toString()).join(",")})', expr.pos).expr;
+						}
 						
+					case _: e.iter( extract );
+				}
+				extract( e );
+				
+				// Check if it's a scoped variable
+				var name = parts.join('.');
+				
+				switch (local.kind) {
+					case FFun(m):
+						var finder:Expr->Void = null;
+						
+						finder = function(e:Expr) {
+							switch (e.expr) {
+								case EVars(vars):
+									for (v in vars) if (v.name.trim() == name) {
+										type = v.type != null ?  v.type.toType() : Context.typeof( v.expr );
+										break;
+									}
+									
+								case _: 
+									e.iter( finder );
+							}
+						}
+						
+						finder( m.expr );
+						
+					case _:
+						
+				}
+				
+				// Check local methods/properties for a match
+				if (type == null) {
+					var field = Context.getBuildFields().filter( function(f) return f.name == name )[0];
+					
+					if (field != null) type = switch (field.kind) {
+						case FFun(m): TFun( [for (arg in m.args) { name:arg.name, opt:arg.opt, t:arg.type.toType() } ], m.ret.toType() );
+						case FVar(t, _): t.toType().follow();
+						case FProp(_, _, t, _): t.toType().follow();
 					}
 					
 				}
 				
-			case EArrayDecl(exprs):
-				result = { expr: EArrayDecl( [for (expr in exprs) loop( expr )] ), pos: e.pos };
-				
-			case EBlock(exprs):
-				result = { expr: EBlock( [for (expr in exprs) loop( expr )] ), pos: e.pos };
-				
-			case ECall(expr, params):
-				var type = expr.printExpr().find();
-				if (type != null) {
-					result = { expr: ECall( expr, paramSub( type, params ) ), pos: e.pos };
+				// Try and resolve the type by building a package, class and then by field
+				if (type == null) {
+					var pack = [];
+					
+					while (type == null && parts.length > 0) {
+						var part = parts.shift();
+						var name = pack.toDotPath( part );
+						
+						try {
+							type = Context.getType( name );
+						} catch (_e:Dynamic) {
+							pack.push( part );
+						}
+					}
+					
+					if (type != null) {
+						if (parts.length > 0) type = type.resolveField( parts );
+					}
+					
 				}
+				//trace( type );
+			/*case EConst(CIdent(ident)):
+				// Check local methods/properties for a match
+				var field = Context.getBuildFields().filter( function(f) return f.name == ident )[0];
 				
-			case ENew(tpath, params):
-				var type = '${tpath.path()}.new'.find();
-				if (type != null) {
-					result = { expr: ENew( tpath, paramSub( type, params ) ), pos: e.pos };
+				if (field != null) type = switch (field.kind) {
+					case FFun(m): TFun( [for (arg in m.args) { name:arg.name, opt:arg.opt, t:arg.type.toType() } ], m.ret.toType() );
+					case FVar(t, _): t.toType().follow();
+					case FProp(_, _, t, _): t.toType().follow();
 				}
-				
+				*/
 			case _:
-				//trace( e );
+				trace( expr );
+		}
+		
+		return type;
+	}
+	
+	private static function resolveField(cls:Type, fields:Array<String>) {
+		var result = cls;
+		var cls = cls.getClass();
+		
+		while (fields.length > 0) {
+			var field = fields.shift();
+			
+			var cfield = switch ([cls.findField( field ), cls.findField( field, true )]) {
+				case [null, x] if (x != null): x;
+				case [x, null] if (x != null): x;
+				case _: null;
+			}
+			
+			if (cfield != null) switch (cfield.type.follow()) {
+				case TType(t, p):
+					result = t.get().type.follow();
+					
+				case TInst(t, p):
+					result = cfield.type.follow();
+					cls = t.get();
+					
+				case TAnonymous(a):
+					var afields = a.get().fields;
+					
+					while (fields.length > 0) {
+						field = fields.shift();
+						var filter = afields.filter( function(f) return f.name == field );
+						if (filter.length > 0) {
+							result = filter[0].type.follow();
+						}
+					}
+					
+				case _: 
+					result = cfield.type.follow();
+					
+			} else {
+				break;
+			}
+			
 		}
 		
 		return result;
+	}
+	
+	private static inline function isUpperCase(value:String):Bool {
+		return value == value.toUpperCase();
 	}
 	
 }
