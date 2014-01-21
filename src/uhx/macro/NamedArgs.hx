@@ -3,7 +3,7 @@ package uhx.macro;
 import haxe.macro.Type;
 import haxe.macro.Expr;
 import haxe.macro.Context;
-import uhx.macro.KlasImpl;
+import uhx.macro.KlasImp;
 
 using Lambda;
 using StringTools;
@@ -21,11 +21,11 @@ class NamedArgs {
 	
 	private static function initialize() {
 		try {
-			if (!KlasImpl.setup) {
-				KlasImpl.initalize();
+			if (!KlasImp.setup) {
+				KlasImp.initalize();
 			}
 			
-			KlasImpl.DEFAULTS.set('NamedArgs', NamedArgs.handler);
+			KlasImp.INLINE_META.set( ~/[\(\s]*@:?[\d\w]+\s+[\d\w\.'"~\/\\=\\+-\|#@]+[\s\),]+/, NamedArgs.handler );
 		} catch (e:Dynamic) {
 			// This assumes that `implements Klas` is not being used
 			// but `@:autoBuild` or `@:build` metadata is being used 
@@ -33,21 +33,14 @@ class NamedArgs {
 		}
 	}
 	
-	private static var namedarg_ereg:EReg = ~/[\(\s]*@:?[\d\w]+\s+[\d\w\.'"~\/\\=\\+-\|#@]+[\s\),]+/;
-
-	public static function build():Array<Field> {
-		return handler( Context.getLocalClass().get(), Context.getBuildFields() );
-	}
-	
-	public static function handler(cls:ClassType, fields:Array<Field>):Array<Field> {
+	public static function handler(cls:ClassType, field:Field):Field {
 		
-		for (field in fields) switch (field.kind) {
-			case FFun(method) if (namedarg_ereg.match( method.expr.toString() )): 
-				loop( method.expr, field );
+		switch (field.kind) {
+			case FFun(method): loop( method.expr, field );
 			case _:
 		}
 		
-		return fields;
+		return field;
 	}
 	
 	private static function loop(e:Expr, field:Field) {
