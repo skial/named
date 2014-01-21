@@ -32,6 +32,8 @@ class NamedArgs {
 			// with the provided `uhx.macro.NamedArgs.build()` method.
 		}
 	}
+	
+	private static var namedarg_ereg:EReg = ~/[\(\s]*@:?[\d\w]+\s+[\d\w\.'"~\/\\=\\+-\|#@]+[\s\),]+/;
 
 	public static function build():Array<Field> {
 		return handler( Context.getLocalClass().get(), Context.getBuildFields() );
@@ -40,18 +42,15 @@ class NamedArgs {
 	public static function handler(cls:ClassType, fields:Array<Field>):Array<Field> {
 		
 		for (field in fields) switch (field.kind) {
-			case FFun(method):
+			case FFun(method) if (namedarg_ereg.match( method.expr.toString() )): 
 				loop( method.expr, field );
-				
 			case _:
-			
 		}
 		
 		return fields;
 	}
 	
 	private static function loop(e:Expr, field:Field) {
-		//trace( e.toString(), e );
 		switch (e) {
 			case macro $ident($a { params } ):
 				var type = e.resolve(field);
@@ -72,60 +71,42 @@ class NamedArgs {
 	}
 	
 	private static function paramSub(caller:Type, params:Array<Expr>) {
-		var args = switch(caller) {
-			case TFun(args, _): args;
-			case _: [];
-		}
-		var arity = args.length;
-		var new_params = [for (i in 0...arity) macro null];
-		var pos_map = [for (i in 0...arity) args[i].name => i];
+		// First check `params` if any metadata exists
+		var hasMeta = params.exists( function(p) return switch (p) {
+			case { expr: EMeta(_, _), pos: _ } : true;
+			case _: false;
+		} );
 		
-		for (i in 0...params.length) switch (params[i]) {
-			case { expr: EMeta(meta, expr), pos: pos } if (pos_map.exists( meta.name.replace(':', '') )):
-				var name = meta.name.replace(':', '');
-				new_params[ pos_map.get( name ) ] = expr;
-				
-			case _:
-				new_params[i] = params[i];
+		var results = params;
+		
+		if (hasMeta) {
+			var args = switch(caller) {
+				case TFun(args, _): args;
+				case _: [];
+			}
+			var arity = args.length;
+			var new_params = [for (i in 0...arity) macro null];
+			var pos_map = [for (i in 0...arity) args[i].name => i];
+			
+			for (i in 0...params.length) switch (params[i]) {
+				case { expr: EMeta(meta, expr), pos: pos } if (pos_map.exists( meta.name.replace(':', '') )):
+					var name = meta.name.replace(':', '');
+					new_params[ pos_map.get( name ) ] = expr;
+					
+				case _:
+					new_params[i] = params[i];
+			}
+			
+			results = new_params;
 		}
 		
-		return new_params;
+		return results;
 	}
 	
 	private static function resolve(expr:Expr, local:Field) {
 		var type = null;
 		
 		switch (expr.expr) {
-			/*case EField(e, f):
-				var parts = [];
-				
-				var extract:Expr->Void = null;
-				extract = function(e) switch (e.expr) {
-					case EConst(CIdent(ident)): parts.push( ident );
-					case EField( { expr: EConst(CIdent(ident)), pos: pos }, f): parts = parts.concat( [ident, f] );
-					case _: e.iter( extract );
-				}
-				extract( e );
-				
-				parts.push( f );
-				
-				var pack = [];
-				
-				while (type == null && parts.length > 0) {
-					var part = parts.shift();
-					var name = pack.toDotPath( part );
-					
-					try {
-						type = Context.getType( name );
-					} catch (_e:Dynamic) {
-						pack.push( part );
-					}
-				}
-				
-				if (type != null) {
-					if (parts.length > 0) type = type.resolveField( parts );
-				}
-				*/
 			case ECall(e, p):
 				var parts = [];
 				var extract:Expr->Void = null;
@@ -206,17 +187,7 @@ class NamedArgs {
 					}
 					
 				}
-				//trace( type );
-			/*case EConst(CIdent(ident)):
-				// Check local methods/properties for a match
-				var field = Context.getBuildFields().filter( function(f) return f.name == ident )[0];
 				
-				if (field != null) type = switch (field.kind) {
-					case FFun(m): TFun( [for (arg in m.args) { name:arg.name, opt:arg.opt, t:arg.type.toType() } ], m.ret.toType() );
-					case FVar(t, _): t.toType().follow();
-					case FProp(_, _, t, _): t.toType().follow();
-				}
-				*/
 			case _:
 				trace( expr );
 		}
