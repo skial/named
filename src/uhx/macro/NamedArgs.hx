@@ -21,10 +21,7 @@ class NamedArgs {
 	
 	private static function initialize() {
 		try {
-			if (!KlasImp.setup) {
-				KlasImp.initalize();
-			}
-			
+			KlasImp.initalize();
 			KlasImp.INLINE_META.set( ~/[\(\s]*@:?[\d\w]+\s+[\d\w\.'"~\/\\=\\+-\|#@]+[\s\),]+/, NamedArgs.handler );
 		} catch (e:Dynamic) {
 			// This assumes that `implements Klas` is not being used
@@ -50,12 +47,12 @@ class NamedArgs {
 				
 				if (type != null) {
 					var results = paramSub( type, params );
-					e.expr = Context.parse( '${ident.toString()}(${results.map(function(r) return r.toString()).join(",")})', e.pos).expr;
+					e.expr = Context.parse( '${ident}(${results.map(function(r) return r.toString()).join(",")})', e.pos).expr;
 				}
 				
 			case macro new $ident($a { params } ):
 				var results = paramSub( Context.typeof(e).getClass().constructor.get().type, params );
-				e.expr = Context.parse( 'new ${ident.toString()}(${results.map(function(r) return r.toString()).join(",")})', e.pos).expr;
+				e.expr = Context.parse( 'new ${ident}(${results.map(function(r) return r.toString()).join(",")})', e.pos).expr;
 				
 			case _:
 				e.iter( loop.bind(_, field) );
