@@ -22,7 +22,7 @@ class NamedArgs {
 	private static function initialize() {
 		try {
 			KlasImp.initalize();
-			KlasImp.INLINE_META.set( ~/[\(\s]*@:?[\d\w]+\s+[\d\w\.'"~\/\\=\\+-\|#@]+[\s\),]+/, NamedArgs.handler );
+			KlasImp.INLINE_META.set( ~/\([\s]*@:?[\d\w]+\s+[\d\w\.'"~\/\\=\\+-\|#@]+[\s,]*\)/, NamedArgs.handler );
 		} catch (e:Dynamic) {
 			// This assumes that `implements Klas` is not being used
 			// but `@:autoBuild` or `@:build` metadata is being used 
@@ -30,10 +30,21 @@ class NamedArgs {
 		}
 	}
 	
+	public static function build():Array<Field> {
+		var cls = Context.getLocalClass().get();
+		var fields = Context.getBuildFields();
+		
+		for (i in 0...fields.length) {
+			fields[i] = handler( cls, fields[i] );
+		}
+		
+		return fields;
+	}
+	
 	public static function handler(cls:ClassType, field:Field):Field {
 		
 		switch (field.kind) {
-			case FFun(method): loop( method.expr, field );
+			case FFun(method) if (method.expr != null): loop( method.expr, field );
 			case _:
 		}
 		
