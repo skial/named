@@ -1,5 +1,6 @@
 package uhx.macro;
 
+import haxe.macro.Printer;
 import haxe.macro.Type;
 import haxe.macro.Expr;
 import haxe.macro.Context;
@@ -22,7 +23,9 @@ class NamedArgs {
 	private static function initialize() {
 		try {
 			KlasImp.initalize();
-			KlasImp.INLINE_META.set( ~/\([\s]*@:?[\d\w]+\s+[\d\w\.'"~\/\\=\\+-\|#@]+[\s,]*\)/, NamedArgs.handler );
+			//KlasImp.INLINE_META.set( ~/\([\s]*@:?[\d\w]+\s+[\d\w\.'"~\/\\=\\+-\|#@]+[\s,]*\)/, NamedArgs.handler );
+			//KlasImp.INLINE_META.set( ~/@:?[\d\w]+\s+[\S]+[\s,]*/, NamedArgs.handler );
+			KlasImp.INLINE_META.set( ~/([\s]*@:?[\w]+[\sa-zA-Z0-9.'"<=>\-,\?]*)([\s]*,|[\s]*\))/, NamedArgs.handler );
 		} catch (e:Dynamic) {
 			// This assumes that `implements Klas` is not being used
 			// but `@:autoBuild` or `@:build` metadata is being used 
@@ -52,18 +55,22 @@ class NamedArgs {
 	}
 	
 	private static function loop(e:Expr, field:Field) {
+		trace( new Printer().printExpr( e ) );
 		switch (e) {
 			case macro $ident($a { params } ):
 				var type = e.resolve(field);
 				
 				if (type != null) {
 					var results = paramSub( type, params );
-					e.expr = Context.parse( '${ident}(${results.map(function(r) return r.toString()).join(",")})', e.pos).expr;
+					e.expr = Context.parse( '${new Printer().printExpr( ident )}(${results.map(function(r) return r.toString()).join(",")})', e.pos).expr;
 				}
 				
 			case macro new $ident($a { params } ):
 				var results = paramSub( Context.typeof(e).getClass().constructor.get().type, params );
-				e.expr = Context.parse( 'new ${ident}(${results.map(function(r) return r.toString()).join(",")})', e.pos).expr;
+				
+				if (results != params) {
+					e.expr = Context.parse( 'new ${ident.name}(${results.map(function(r) return r.toString()).join(",")})', e.pos).expr;
+				}
 				
 			case _:
 				e.iter( loop.bind(_, field) );
@@ -72,6 +79,7 @@ class NamedArgs {
 	}
 	
 	private static function paramSub(caller:Type, params:Array<Expr>) {
+		
 		// First check `params` if any metadata exists
 		var hasMeta = params.exists( function(p) return switch (p) {
 			case { expr: EMeta(_, _), pos: _ } : true;
