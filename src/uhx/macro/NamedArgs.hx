@@ -23,8 +23,6 @@ class NamedArgs {
 	private static function initialize() {
 		try {
 			KlasImp.initalize();
-			//KlasImp.INLINE_META.set( ~/\([\s]*@:?[\d\w]+\s+[\d\w\.'"~\/\\=\\+-\|#@]+[\s,]*\)/, NamedArgs.handler );
-			//KlasImp.INLINE_META.set( ~/@:?[\d\w]+\s+[\S]+[\s,]*/, NamedArgs.handler );
 			KlasImp.INLINE_META.set( ~/([\s]*@:?[\w]+[\sa-zA-Z0-9.'"<=>\-,\?]*)([\s]*,|[\s]*\))/, NamedArgs.handler );
 		} catch (e:Dynamic) {
 			// This assumes that `implements Klas` is not being used
@@ -55,7 +53,7 @@ class NamedArgs {
 	}
 	
 	private static function loop(e:Expr, field:Field) {
-		trace( new Printer().printExpr( e ) );
+		//trace( new Printer().printExpr( e ) );
 		switch (e) {
 			case macro $ident($a { params } ):
 				var type = e.resolve(field);
