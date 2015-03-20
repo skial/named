@@ -23,7 +23,7 @@ class NamedArgs {
 	private static function initialize() {
 		try {
 			KlasImp.initialize();
-			KlasImp.INLINE_META.set( ~/([\s]*@:?[\w]+[\sa-zA-Z0-9.'"<=>\-,\?]*)([\s]*,|[\s]*\))/, NamedArgs.handler );
+			KlasImp.inlineMetadata.add( ~/([\s]*@:?[\w]+[\sa-zA-Z0-9.'"<=>\-,\?]*)([\s]*,|[\s]*\))/, NamedArgs.handler );
 		} catch (e:Dynamic) {
 			// This assumes that `implements Klas` is not being used
 			// but `@:autoBuild` or `@:build` metadata is being used 
