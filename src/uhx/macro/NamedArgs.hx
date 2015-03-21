@@ -85,13 +85,13 @@ class NamedArgs {
 		} );
 		
 		var results = params;
+		var args = switch(caller) {
+			case TFun(args, _): args;
+			case _: [];
+		}
+		var arity = args.length;
 		
 		if (hasMeta) {
-			var args = switch(caller) {
-				case TFun(args, _): args;
-				case _: [];
-			}
-			var arity = args.length;
 			var new_params = [for (i in 0...arity) macro null];
 			var pos_map = [for (i in 0...arity) args[i].name => i];
 			
@@ -104,7 +104,11 @@ class NamedArgs {
 					new_params[i] = params[i];
 			}
 			
-			results = new_params;
+			for (i in 0...arity) if (args[i].opt && new_params[i].expr.match( EConst(CIdent('null')) )) {
+				new_params[i] = null;
+			}
+			
+			results = new_params.filter( function(e) return e != null );
 		}
 		
 		return results;
