@@ -60,14 +60,16 @@ class NamedArgs {
 				
 				if (type != null) {
 					var results = paramSub( type, params );
-					e.expr = Context.parse( '${new Printer().printExpr( ident )}(${results.map(function(r) return r.toString()).join(",")})', e.pos).expr;
+					e.expr = (macro $e { ident } ($a { results } )).expr;
+					
 				}
 				
 			case macro new $ident($a { params } ):
 				var results = paramSub( Context.typeof(e).getClass().constructor.get().type, params );
 				
 				if (results != params) {
-					e.expr = Context.parse( 'new ${ident.name}(${results.map(function(r) return r.toString()).join(",")})', e.pos).expr;
+					e.expr = ENew( { pack:ident.pack, name:ident.name }, results );
+					
 				}
 				
 			case _:
@@ -104,8 +106,14 @@ class NamedArgs {
 					new_params[i] = params[i];
 			}
 			
-			for (i in 0...arity) if (args[i].opt && new_params[i].expr.match( EConst(CIdent('null')) )) {
+			// Trim any hanging nulls.
+			var i = arity;
+			while (--i > 0) if (args[i].opt && new_params[i].expr.match( EConst(CIdent('null')) )) {
 				new_params[i] = null;
+				
+			} else {
+				break;
+				
 			}
 			
 			results = new_params.filter( function(e) return e != null );
