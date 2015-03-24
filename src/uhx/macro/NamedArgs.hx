@@ -23,7 +23,7 @@ class NamedArgs {
 	private static function initialize() {
 		try {
 			KlasImp.initialize();
-			KlasImp.INLINE_META.set( ~/([\s]*@:?[\w]+[\sa-zA-Z0-9.'"<=>\-,\?]*)([\s]*,|[\s]*\))/, NamedArgs.handler );
+			KlasImp.inlineMetadata.add( ~/([\s]*@:?[\w]+[\sa-zA-Z0-9.'"<=>\-,\?]*)([\s]*,|[\s]*\))/, NamedArgs.handler );
 		} catch (e:Dynamic) {
 			// This assumes that `implements Klas` is not being used
 			// but `@:autoBuild` or `@:build` metadata is being used 
@@ -60,14 +60,16 @@ class NamedArgs {
 				
 				if (type != null) {
 					var results = paramSub( type, params );
-					e.expr = Context.parse( '${new Printer().printExpr( ident )}(${results.map(function(r) return r.toString()).join(",")})', e.pos).expr;
+					e.expr = (macro $e { ident } ($a { results } )).expr;
+					
 				}
 				
 			case macro new $ident($a { params } ):
 				var results = paramSub( Context.typeof(e).getClass().constructor.get().type, params );
 				
 				if (results != params) {
-					e.expr = Context.parse( 'new ${ident.name}(${results.map(function(r) return r.toString()).join(",")})', e.pos).expr;
+					e.expr = ENew( { pack:ident.pack, name:ident.name }, results );
+					
 				}
 				
 			case _:
@@ -85,13 +87,13 @@ class NamedArgs {
 		} );
 		
 		var results = params;
+		var args = switch(caller) {
+			case TFun(args, _): args;
+			case _: [];
+		}
+		var arity = args.length;
 		
 		if (hasMeta) {
-			var args = switch(caller) {
-				case TFun(args, _): args;
-				case _: [];
-			}
-			var arity = args.length;
 			var new_params = [for (i in 0...arity) macro null];
 			var pos_map = [for (i in 0...arity) args[i].name => i];
 			
@@ -104,7 +106,17 @@ class NamedArgs {
 					new_params[i] = params[i];
 			}
 			
-			results = new_params;
+			// Trim any hanging nulls.
+			var i = arity;
+			while (--i > 0) if (args[i].opt && new_params[i].expr.match( EConst(CIdent('null')) )) {
+				new_params[i] = null;
+				
+			} else {
+				break;
+				
+			}
+			
+			results = new_params.filter( function(e) return e != null );
 		}
 		
 		return results;
