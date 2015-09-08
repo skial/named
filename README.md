@@ -15,7 +15,7 @@ You have two options, use Named with [Klas](https://github.com/skial/klas/) or n
 
 #### With Klas
 
-```
+```Haxe
 package ;
 
 class Main implements Klas {
@@ -33,7 +33,7 @@ class Main implements Klas {
 
 #### Without Klas
 
-```
+```Haxe
 package ;
 
 @:autoBuild( uhx.macro.NamedArgs.build() )
